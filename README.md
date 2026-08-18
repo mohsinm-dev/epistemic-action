@@ -10,19 +10,19 @@ This is intentionally small. It is meant to make epistemic action inspectable be
 
 When is information worth seeking?
 
-For a belief \(q(s)\), the epistemic agent compares acting immediately with a policy that first observes the clue. Its information term is the expected reduction in belief entropy:
+For a belief $q(s)$, the epistemic agent compares acting immediately with a policy that first observes the clue. Its information term is the expected reduction in belief entropy:
 
-\[
-\operatorname{IG} = H[q(s)] - \mathbb{E}_{o}[H[q(s \mid o)]].
-\]
+$$
+\operatorname{IG} = H[q(s)] - \mathbb{E}_{o}\left[H[q(s \mid o)]\right].
+$$
 
 The clue policy is scored as
 
-\[
+$$
 \mathbb{E}[R \mid \text{clue}] - c + \lambda\,\operatorname{IG},
-\]
+$$
 
-where \(c\) is clue cost and \(\lambda\) controls the weight on information gain.
+where $c$ is clue cost and $\lambda$ controls the weight on information gain.
 
 This is **active-inference-inspired**, not a full implementation of variational free energy or expected free energy. Keeping that distinction explicit is part of the exercise.
 
