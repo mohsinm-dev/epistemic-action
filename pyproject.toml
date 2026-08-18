@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "epistemic-action"
+version = "0.1.0"
+description = "Minimal experiments on information-seeking action under uncertainty."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{name = "Mohsin Mehmood"}]
+
+[project.optional-dependencies]
+plot = ["matplotlib>=3.9"]
+dev = ["pylint>=3.3", "pytest>=8.3"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.pylint.main]
+py-version = "3.12"
+source-roots = ["src"]
+
+[tool.pylint.format]
+max-line-length = 100
