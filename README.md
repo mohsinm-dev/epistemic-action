@@ -13,13 +13,13 @@ When is information worth seeking?
 For a belief $q(s)$, the epistemic agent compares acting immediately with a policy that first observes the clue. Its information term is the expected reduction in belief entropy:
 
 $$
-\operatorname{IG} = H[q(s)] - \mathbb{E}_{o}\left[H[q(s \mid o)]\right].
+IG = H[q(s)] - \mathbb{E}_{o}[H[q(s \mid o)]].
 $$
 
-The clue policy is scored as
+Let $C$ denote the action of observing the clue. The clue policy is scored as
 
 $$
-\mathbb{E}[R \mid \text{clue}] - c + \lambda\,\operatorname{IG},
+\mathbb{E}[R \mid C] - c + \lambda IG,
 $$
 
 where $c$ is clue cost and $\lambda$ controls the weight on information gain.
