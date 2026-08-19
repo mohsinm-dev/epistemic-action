@@ -2,7 +2,7 @@
 
 Small experiments on when an agent should gather information before acting.
 
-The repository starts with a two-door clue task, then moves to evidence acquisition, model-misspecification stress tests, and finite-horizon sequential planning. Each experiment keeps the assumptions explicit before introducing full active inference.
+The repository starts with a two-door clue task, then moves through evidence valuation, model misspecification, finite-horizon Bayesian planning, and finally a controlled Active Inference comparison. Each stage keeps the assumptions visible instead of introducing the full framework at once.
 
 ## 1. Clue experiment
 
@@ -16,7 +16,7 @@ $$
 
 The simple epistemic policy trades task reward against clue cost and information gain. This is **active-inference-inspired**, not a full implementation of variational or expected free energy.
 
-Run it with:
+Run:
 
 ```bash
 python -m epistemic_action.experiment
@@ -58,14 +58,12 @@ The one-step benchmark assumes evidence is correctly specified. The stress test 
 
 Two evidence channels have the same marginal accuracy but share a signal draw with probability $rho$. When $rho=0$, the channels are conditionally independent. When $rho=1$, the second channel is completely redundant.
 
-The benchmark compares four inference models:
+The benchmark compares:
 
 - `single_source`: ignore the second observation
 - `naive_independent`: use both observations but assume $rho=0$
 - `correlation_aware`: use the configured dependence strength
 - `oracle`: use the true dependence and true source accuracy
-
-It separately varies the **true** source accuracy and the accuracy assumed by the inference model. This separates dependence misspecification from calibration error.
 
 Run:
 
@@ -73,7 +71,7 @@ Run:
 python -m epistemic_action.stress_experiment
 ```
 
-It writes `results/stress.csv` with decision accuracy, asymmetric decision loss, Brier score, log loss, and mean posterior movement.
+It separately varies true source accuracy and assumed source accuracy so dependence misspecification and calibration error can be studied independently.
 
 ## 4. Sequential evidence acquisition
 
@@ -81,22 +79,16 @@ The next experiment asks:
 
 > Can an observation be worth acquiring only because it changes which future observation becomes useful?
 
-This is the first genuinely non-myopic benchmark in the repository. The agent may now repeatedly choose between:
-
-- acting immediately
-- acquiring another unused evidence source
-- escalating to a human at a fixed cost
+The agent may now repeatedly choose between acting, querying another unused source, or escalating at a fixed cost.
 
 The benchmark compares:
 
-- `greedy`: never acquire evidence
-- `information_gain`: repeatedly choose the most entropy-reducing source, ignoring cost
-- `myopic_voi`: query only when one-step decision value is positive
-- `lookahead`: exact finite-horizon Bayesian planning over future signals and remaining sources
+- `greedy`: no evidence acquisition
+- `information_gain`: maximize expected entropy reduction, ignoring cost
+- `myopic_voi`: one-step decision value
+- `lookahead`: exact finite-horizon Bayesian planning over future signals
 
-The default environment contains a cheap `screen` and a stronger, more expensive `review`. At the configured prior, neither is worth buying as a one-step purchase. A two-step planner can still prefer the screen because a clear result lets it stop while a flagged result can make the stronger review worthwhile.
-
-This is option value from information acquisition: the value of an observation comes partly from how it changes later decisions.
+The default environment contains a cheap `screen` and a stronger `review`. At the default prior neither source is worthwhile as a one-step purchase, but a two-step planner can still value the screen because a clear result lets it stop while a flagged result can make the review worthwhile.
 
 Run:
 
@@ -104,20 +96,50 @@ Run:
 python -m epistemic_action.sequential_experiment
 ```
 
-A useful diagnostic is:
+This is still an exact Bayesian planner, not Active Inference.
+
+## 5. Active Inference comparison
+
+The fifth experiment keeps the **same sequential task** and adds a transparent discrete Active Inference formulation.
+
+`active_inference.py` contains:
+
+- a factorized A/B/C/D-style generative model
+- expected hidden-state information gain in nats
+- an open-loop `standard_efe` planner
+- an observation-contingent `sophisticated_efe` planner
+
+The hidden transaction state is static. A controlled context factor records whether the current action is `screen`, `review`, `approve`, `reject`, or `escalate`. Evidence outcomes, terminal outcomes, and query costs are represented as separate observation modalities. Source availability is fully observed task memory and is enforced by the planner rather than represented as a hidden state.
+
+Task losses are mapped into log-preference units with a positive `preference_precision` parameter. This scaling is intentionally swept rather than treated as a free tuning knob.
+
+The comparison includes:
+
+- `bayes_lookahead`: exact finite-horizon expected-utility planning
+- `standard_efe`: open-loop negative-EFE policy scoring
+- `sophisticated_efe`: recursive observation-contingent negative-EFE planning
+
+Run:
 
 ```bash
-python -m epistemic_action.sequential_experiment \
+python -m epistemic_action.active_inference_experiment
+```
+
+A useful precision sweep is:
+
+```bash
+python -m epistemic_action.active_inference_experiment \
   --prior 0.05 \
   --false-approve-cost 5 \
   --escalation-cost 0.4 \
   --horizon 2 \
+  --precisions 0.5,1,2,5,10,20 \
   --episodes 20000
 ```
 
-With horizon `1`, exact lookahead reduces to the myopic policy. With horizon `2`, it can discover the value of screening before deciding whether stronger evidence is worth acquiring.
+The distinction between the two EFE planners is deliberate. The standard form propagates predicted beliefs forward without conditioning later policy choices on anticipated observations. The sophisticated form recursively branches over possible observations, updates beliefs, and then chooses the next action. In this small benchmark that distinction is exactly what determines whether the planner can represent the option value of screening.
 
-This remains an exact Bayesian planner under a tiny synthetic model. It is **not** yet an Active Inference implementation.
+This module is a benchmark-specific, inspectable implementation. It is **not a reimplementation of `pymdp`**. Reproducing the same task in the current JAX-first `pymdp` stack is a later validation step.
 
 ## Setup
 
@@ -134,32 +156,36 @@ pytest
 
 ```text
 src/epistemic_action/
-├── agents.py                 # original clue policies and information gain
-├── environment.py            # two-door clue environment
-├── experiment.py             # clue reliability/cost sweep
-├── plot.py                   # clue experiment plots
-├── evidence.py               # binary evidence model, Bayes updates, VoI
-├── policies.py               # one-step evidence-selection baselines
-├── evidence_experiment.py    # reproducible evidence benchmark
-├── stress.py                 # correlated evidence model
-├── stress_experiment.py      # correlation/calibration stress sweep
-├── sequential.py             # finite-horizon Bayesian planner
-└── sequential_experiment.py  # sequential acquisition benchmark
+├── agents.py                         # original clue policies and information gain
+├── environment.py                    # two-door clue environment
+├── experiment.py                     # clue reliability/cost sweep
+├── plot.py                           # clue experiment plots
+├── evidence.py                       # binary evidence model, Bayes updates, VoI
+├── policies.py                       # one-step evidence-selection baselines
+├── evidence_experiment.py            # reproducible evidence benchmark
+├── stress.py                         # correlated evidence model
+├── stress_experiment.py              # correlation/calibration stress sweep
+├── sequential.py                     # exact finite-horizon Bayesian planner
+├── sequential_experiment.py          # sequential acquisition benchmark
+├── active_inference.py               # A/B/C/D model and EFE planners
+└── active_inference_experiment.py    # Bayesian vs EFE comparison
 
 tests/
 ```
 
-## Next question
+## Research questions now
 
-The repository now contains the control problem we needed before introducing Active Inference: a belief state, sequential observations, action costs, stopping, escalation, and finite-horizon policies.
+The repository is finally at the point where Active Inference can be evaluated rather than merely discussed.
 
-The next scientifically useful step is to represent the same sequential task explicitly as a small POMDP and compare three planners on the **same generative model**:
+The next questions are:
 
-1. exact Bayesian dynamic programming
-2. a tractable approximate planner
-3. Expected Free Energy / discrete Active Inference
+1. At what preference precision does epistemic value improve or hurt task utility?
+2. When does standard open-loop EFE fail because useful future actions depend on future observations?
+3. When does sophisticated EFE recover the same behavior as exact Bayesian planning, and when does it deliberately differ?
+4. How do those conclusions change under source correlation and calibration error?
+5. Does the same behavior reproduce in `pymdp` rather than only in this transparent reference implementation?
 
-The goal is not to make Active Inference win. It is to identify when its epistemic term changes behavior, whether that behavior improves decision utility, and what computational price it pays.
+The goal is not to make Active Inference win. The goal is to identify which assumptions create useful epistemic behavior and what utility or computational cost comes with it.
 
 ## License
 
