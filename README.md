@@ -2,7 +2,7 @@
 
 Small experiments on when an agent should gather information before acting.
 
-The repository starts with a two-door clue task, then moves to a one-step evidence-acquisition benchmark where information has reliability, decision value, and cost. The aim is to keep each assumption visible before introducing full active inference.
+The repository starts with a two-door clue task, then moves to evidence acquisition and model-misspecification stress tests. Each experiment keeps the assumptions explicit before introducing full active inference.
 
 ## 1. Clue experiment
 
@@ -25,49 +25,69 @@ python -m epistemic_action.plot
 
 ## 2. Evidence acquisition
 
-The second experiment asks a sharper question:
+The second experiment asks:
 
 > Is the most informative observation also the most useful observation?
 
 A synthetic transaction has a hidden state: `legitimate` or `suspicious`. Before approving or rejecting it, a policy may acquire at most one evidence source. Sources differ in sensitivity, specificity, and acquisition cost.
 
-The benchmark compares four policies:
+The benchmark compares:
 
 - `greedy`: act immediately
 - `random`: acquire one random source
-- `information_gain`: choose the source with maximum expected entropy reduction
-- `value_of_information`: choose evidence only when its expected improvement in decision utility exceeds its cost
+- `information_gain`: maximize expected entropy reduction
+- `value_of_information`: acquire evidence only when expected decision improvement exceeds cost
 
-For evidence source $v$, the one-step net value is
+For source $v$, the one-step net value is
 
 $$
 VoI(v) = E_o[max_d U(d|o,v)] - max_d U(d) - C(v).
 $$
 
-A positive value means the evidence is worth acquiring under the stated decision costs.
-
-The source parameters in this benchmark are **synthetic**. They are not estimates for real fraud or finance systems.
-
-Run the benchmark with:
+Run:
 
 ```bash
 python -m epistemic_action.evidence_experiment
 ```
 
-It writes `results/evidence.csv` with accuracy, decision loss, evidence cost, total loss, evidence rate, and manual-review rate.
+The source parameters are synthetic and are not estimates for real fraud or finance systems.
 
-A useful default condition is:
+## 3. Correlation and calibration stress test
+
+The one-step benchmark assumes evidence is correctly specified. The stress test deliberately violates that assumption.
+
+Two evidence channels have the same marginal accuracy but share a signal draw with probability $rho$. When $rho=0$, the channels are conditionally independent. When $rho=1$, the second channel is completely redundant.
+
+The benchmark compares four inference models:
+
+- `single_source`: ignore the second observation
+- `naive_independent`: use both observations but assume $rho=0$
+- `correlation_aware`: use the configured dependence strength
+- `oracle`: use the true dependence and true source accuracy
+
+It separately varies the **true** source accuracy and the accuracy assumed by the inference model. This separates dependence misspecification from calibration error.
+
+Run:
 
 ```bash
-python -m epistemic_action.evidence_experiment \
-  --priors 0.1 \
-  --false-approve-costs 5 \
+python -m epistemic_action.stress_experiment
+```
+
+It writes `results/stress.csv` with decision accuracy, asymmetric decision loss, Brier score, log loss, and mean posterior movement.
+
+A useful diagnostic condition is:
+
+```bash
+python -m epistemic_action.stress_experiment \
+  --priors 0.02 \
+  --true-accuracy 0.85 \
+  --assumed-accuracies 0.85 \
+  --correlations 0.8 \
+  --false-approve-cost 5 \
   --episodes 20000
 ```
 
-Under this setup, pure information gain prefers the most informative source even when it is expensive. The value-of-information policy can prefer a cheaper source because it optimizes decision value rather than uncertainty reduction alone.
-
-That distinction is the point of the experiment.
+Under strong positive dependence, a model that incorrectly treats repeated evidence as independent can become overconfident and cross the decision boundary when a correlation-aware model would not. This is the failure mode the stress test is designed to expose.
 
 ## Setup
 
@@ -90,14 +110,16 @@ src/epistemic_action/
 ├── plot.py                 # clue experiment plots
 ├── evidence.py             # binary evidence model, Bayes updates, VoI
 ├── policies.py             # one-step evidence-selection baselines
-└── evidence_experiment.py  # reproducible evidence benchmark
+├── evidence_experiment.py  # reproducible evidence benchmark
+├── stress.py               # correlated evidence model
+└── stress_experiment.py    # correlation/calibration stress sweep
 
 tests/
 ```
 
 ## Next question
 
-The current evidence model assumes each source is correctly specified and conditionally independent given the hidden state. The next useful stress test is to violate those assumptions with correlated or miscalibrated evidence and measure when the acquisition policies become overconfident.
+The next step is sequential acquisition: after observing one source, should the agent stop, query another source, or escalate? That introduces policy depth and is the point where a POMDP, Bayesian sequential planner, and eventually expected-free-energy planning become meaningful comparisons.
 
 ## License
 
