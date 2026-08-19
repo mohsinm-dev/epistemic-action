@@ -2,7 +2,7 @@
 
 Small experiments on when an agent should gather information before acting.
 
-The repository starts with a two-door clue task, then moves through evidence valuation, model misspecification, finite-horizon Bayesian planning, and finally a controlled Active Inference comparison. Each stage keeps the assumptions visible instead of introducing the full framework at once.
+The repository starts with a two-door clue task, then moves through evidence valuation, model misspecification, finite-horizon Bayesian planning, and a controlled Active Inference comparison. Each stage keeps the assumptions visible instead of introducing the full framework at once.
 
 ## 1. Clue experiment
 
@@ -79,7 +79,7 @@ The next experiment asks:
 
 > Can an observation be worth acquiring only because it changes which future observation becomes useful?
 
-The agent may now repeatedly choose between acting, querying another unused source, or escalating at a fixed cost.
+The agent may repeatedly choose between acting, querying another unused source, or escalating at a fixed cost.
 
 The benchmark compares:
 
@@ -88,7 +88,24 @@ The benchmark compares:
 - `myopic_voi`: one-step decision value
 - `lookahead`: exact finite-horizon Bayesian planning over future signals
 
-The default environment contains a cheap `screen` and a stronger `review`. At the default prior neither source is worthwhile as a one-step purchase, but a two-step planner can still value the screen because a clear result lets it stop while a flagged result can make the review worthwhile.
+The corrected default option-value condition is:
+
+```text
+P(suspicious)       = 0.05
+false approve loss  = 5.0
+false reject loss   = 1.0
+escalation cost     = 0.40
+
+screen accuracy     = 0.70
+screen cost         = 0.05
+
+review accuracy     = 0.95
+review cost         = 0.20
+```
+
+Under this condition neither source has positive one-step decision value. Acting immediately has expected loss `0.250`. A two-step Bayesian planner still selects `screen`, because a clear result lets it stop while a flagged result can make `review` worth acquiring. Its exact expected loss is `0.212`.
+
+This is the intended non-myopic option-value case.
 
 Run:
 
@@ -111,7 +128,7 @@ The fifth experiment keeps the **same sequential task** and adds a transparent d
 
 The hidden transaction state is static. A controlled context factor records whether the current action is `screen`, `review`, `approve`, `reject`, or `escalate`. Evidence outcomes, terminal outcomes, and query costs are represented as separate observation modalities. Source availability is fully observed task memory and is enforced by the planner rather than represented as a hidden state.
 
-Task losses are mapped into log-preference units with a positive `preference_precision` parameter. This scaling is intentionally swept rather than treated as a free tuning knob.
+Task losses are mapped into log-preference units with a positive `preference_precision` parameter. The scaling is swept rather than tuned to one favorable result.
 
 The comparison includes:
 
@@ -125,21 +142,52 @@ Run:
 python -m epistemic_action.active_inference_experiment
 ```
 
-A useful precision sweep is:
+The distinction between the two EFE planners is deliberate. The standard form propagates predicted beliefs without conditioning later policy choices on anticipated observations. The sophisticated form branches over possible observations, updates beliefs, and then chooses the next action.
+
+At the corrected default condition and preference precision `5`, the exact Bayesian and sophisticated-EFE planners both select `screen`, while standard EFE stops. At low preference precision such as `0.5`, the epistemic term can dominate enough that sophisticated EFE selects the expensive `review` first. That is treated as a failure mode to measure, not a desired result.
+
+This module is a benchmark-specific, inspectable implementation. It is **not a reimplementation of `pymdp`**.
+
+## 6. Planner disagreement campaign
+
+A single diagnostic condition is not enough to support a research claim. `disagreement_experiment.py` therefore sweeps the task and computes **exact expected trajectory loss** rather than relying on Monte Carlo estimates.
+
+It varies:
+
+- prior suspicious probability
+- screen accuracy and cost
+- review accuracy and cost
+- Active Inference preference precision
+
+For each condition it records:
+
+- first action
+- exact expected total loss
+- exact expected query count
+- exact expected evidence cost
+- regret relative to finite-horizon Bayesian planning
+
+The compared planners are:
+
+- `myopic_voi`
+- `bayes_lookahead`
+- `standard_efe`
+- `sophisticated_efe`
+
+Run the default campaign with:
 
 ```bash
-python -m epistemic_action.active_inference_experiment \
-  --prior 0.05 \
-  --false-approve-cost 5 \
-  --escalation-cost 0.4 \
-  --horizon 2 \
-  --precisions 0.5,1,2,5,10,20 \
-  --episodes 20000
+python -m epistemic_action.disagreement_experiment
 ```
 
-The distinction between the two EFE planners is deliberate. The standard form propagates predicted beliefs forward without conditioning later policy choices on anticipated observations. The sophisticated form recursively branches over possible observations, updates beliefs, and then chooses the next action. In this small benchmark that distinction is exactly what determines whether the planner can represent the option value of screening.
+The default grid contains `1,350` unique conditions and writes `5,400` planner rows to `results/disagreement.csv`.
 
-This module is a benchmark-specific, inspectable implementation. It is **not a reimplementation of `pymdp`**. Reproducing the same task in the current JAX-first `pymdp` stack is a later validation step.
+The campaign is designed to answer two separate questions:
+
+1. where does non-myopic planning matter?
+2. where does the epistemic term create useful exploration versus unnecessary exploration?
+
+The Bayesian planner is the utility-optimal reference **only for the correctly specified synthetic model used by this campaign**. Later misspecification experiments should not treat it as an oracle for the real world.
 
 ## Setup
 
@@ -168,21 +216,22 @@ src/epistemic_action/
 ├── sequential.py                     # exact finite-horizon Bayesian planner
 ├── sequential_experiment.py          # sequential acquisition benchmark
 ├── active_inference.py               # A/B/C/D model and EFE planners
-└── active_inference_experiment.py    # Bayesian vs EFE comparison
+├── active_inference_experiment.py    # Bayesian vs EFE comparison
+└── disagreement_experiment.py        # exact disagreement/regret campaign
 
 tests/
 ```
 
 ## Research questions now
 
-The repository is finally at the point where Active Inference can be evaluated rather than merely discussed.
+The repository is now set up to evaluate, rather than merely discuss, Active Inference.
 
 The next questions are:
 
 1. At what preference precision does epistemic value improve or hurt task utility?
 2. When does standard open-loop EFE fail because useful future actions depend on future observations?
 3. When does sophisticated EFE recover the same behavior as exact Bayesian planning, and when does it deliberately differ?
-4. How do those conclusions change under source correlation and calibration error?
+4. How do those conclusions change under source correlation, calibration error, and prior shift?
 5. Does the same behavior reproduce in `pymdp` rather than only in this transparent reference implementation?
 
 The goal is not to make Active Inference win. The goal is to identify which assumptions create useful epistemic behavior and what utility or computational cost comes with it.
