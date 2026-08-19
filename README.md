@@ -1,32 +1,75 @@
 # epistemic-action
 
-A minimal experiment on when an agent should gather information before acting.
+Small experiments on when an agent should gather information before acting.
 
-The environment hides reward behind one of two doors. A noisy clue can be inspected before choosing, but inspecting it may have a cost. The repository compares a greedy agent with an epistemic agent that values both expected task reward and expected information gain.
+The repository starts with a two-door clue task, then moves to a one-step evidence-acquisition benchmark where information has reliability, decision value, and cost. The aim is to keep each assumption visible before introducing full active inference.
 
-This is intentionally small. It is meant to make epistemic action inspectable before moving to full active-inference implementations.
+## 1. Clue experiment
 
-## Question
+A hidden reward is behind one of two doors. The agent can act immediately or inspect a noisy clue first.
 
-When is information worth seeking?
-
-For a belief $q(s)$, the epistemic agent compares acting immediately with a policy that first observes the clue. Its information term is the expected reduction in belief entropy:
+For belief $q(s)$, expected information gain is
 
 $$
-IG = H[q(s)] - \mathbb{E}_{o}[H[q(s \mid o)]].
+IG = H[q(s)] - E_o[H[q(s|o)]].
 $$
 
-Let $C$ denote the action of observing the clue. The clue policy is scored as
+The simple epistemic policy trades task reward against clue cost and information gain. This is **active-inference-inspired**, not a full implementation of variational or expected free energy.
+
+Run it with:
+
+```bash
+python -m epistemic_action.experiment
+python -m epistemic_action.plot
+```
+
+## 2. Evidence acquisition
+
+The second experiment asks a sharper question:
+
+> Is the most informative observation also the most useful observation?
+
+A synthetic transaction has a hidden state: `legitimate` or `suspicious`. Before approving or rejecting it, a policy may acquire at most one evidence source. Sources differ in sensitivity, specificity, and acquisition cost.
+
+The benchmark compares four policies:
+
+- `greedy`: act immediately
+- `random`: acquire one random source
+- `information_gain`: choose the source with maximum expected entropy reduction
+- `value_of_information`: choose evidence only when its expected improvement in decision utility exceeds its cost
+
+For evidence source $v$, the one-step net value is
 
 $$
-\mathbb{E}[R \mid C] - c + \lambda IG,
+VoI(v) = E_o[max_d U(d|o,v)] - max_d U(d) - C(v).
 $$
 
-where $c$ is clue cost and $\lambda$ controls the weight on information gain.
+A positive value means the evidence is worth acquiring under the stated decision costs.
 
-This is **active-inference-inspired**, not a full implementation of variational free energy or expected free energy. Keeping that distinction explicit is part of the exercise.
+The source parameters in this benchmark are **synthetic**. They are not estimates for real fraud or finance systems.
 
-## Run
+Run the benchmark with:
+
+```bash
+python -m epistemic_action.evidence_experiment
+```
+
+It writes `results/evidence.csv` with accuracy, decision loss, evidence cost, total loss, evidence rate, and manual-review rate.
+
+A useful default condition is:
+
+```bash
+python -m epistemic_action.evidence_experiment \
+  --priors 0.1 \
+  --false-approve-costs 5 \
+  --episodes 20000
+```
+
+Under this setup, pure information gain prefers the most informative source even when it is expensive. The value-of-information policy can prefer a cheaper source because it optimizes decision value rather than uncertainty reduction alone.
+
+That distinction is the point of the experiment.
+
+## Setup
 
 Python 3.12+ is required.
 
@@ -34,42 +77,27 @@ Python 3.12+ is required.
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e '.[dev,plot]'
-
 pytest
-python -m epistemic_action.experiment
-python -m epistemic_action.plot
 ```
-
-The sweep writes `results/sweep.csv` and one reward plot per clue cost under `results/figures/`.
-
-You can change the experiment directly from the command line:
-
-```bash
-python -m epistemic_action.experiment \
-  --episodes 20000 \
-  --reliabilities 0.5,0.6,0.7,0.8,0.9,1.0 \
-  --costs 0.0,0.05,0.1,0.2,0.3,0.5 \
-  --information-weight 1.0 \
-  --seed 7
-```
-
-## What to look for
-
-At chance-level reliability, the clue carries no information. As reliability rises, observing it becomes useful. Raising clue cost should eventually suppress information seeking.
-
-The useful boundary is not whether the epistemic agent "wins", but where its behavior changes as reliability, cost, and information weight change. That boundary is the starting point for more serious experiments on model misspecification and calibrated uncertainty.
 
 ## Layout
 
 ```text
 src/epistemic_action/
-├── agents.py       # Bayesian update, information gain, agent policies
-├── environment.py  # binary latent state and noisy clue
-├── experiment.py   # reproducible sweeps and CSV output
-└── plot.py         # simple result plots
+├── agents.py               # original clue policies and information gain
+├── environment.py          # two-door clue environment
+├── experiment.py           # clue reliability/cost sweep
+├── plot.py                 # clue experiment plots
+├── evidence.py             # binary evidence model, Bayes updates, VoI
+├── policies.py             # one-step evidence-selection baselines
+└── evidence_experiment.py  # reproducible evidence benchmark
 
 tests/
 ```
+
+## Next question
+
+The current evidence model assumes each source is correctly specified and conditionally independent given the hidden state. The next useful stress test is to violate those assumptions with correlated or miscalibrated evidence and measure when the acquisition policies become overconfident.
 
 ## License
 
