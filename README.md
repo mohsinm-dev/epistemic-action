@@ -2,7 +2,7 @@
 
 Small experiments on when an agent should gather information before acting.
 
-The repository starts with a two-door clue task, then moves to evidence acquisition and model-misspecification stress tests. Each experiment keeps the assumptions explicit before introducing full active inference.
+The repository starts with a two-door clue task, then moves to evidence acquisition, model-misspecification stress tests, and finite-horizon sequential planning. Each experiment keeps the assumptions explicit before introducing full active inference.
 
 ## 1. Clue experiment
 
@@ -75,19 +75,49 @@ python -m epistemic_action.stress_experiment
 
 It writes `results/stress.csv` with decision accuracy, asymmetric decision loss, Brier score, log loss, and mean posterior movement.
 
-A useful diagnostic condition is:
+## 4. Sequential evidence acquisition
+
+The next experiment asks:
+
+> Can an observation be worth acquiring only because it changes which future observation becomes useful?
+
+This is the first genuinely non-myopic benchmark in the repository. The agent may now repeatedly choose between:
+
+- acting immediately
+- acquiring another unused evidence source
+- escalating to a human at a fixed cost
+
+The benchmark compares:
+
+- `greedy`: never acquire evidence
+- `information_gain`: repeatedly choose the most entropy-reducing source, ignoring cost
+- `myopic_voi`: query only when one-step decision value is positive
+- `lookahead`: exact finite-horizon Bayesian planning over future signals and remaining sources
+
+The default environment contains a cheap `screen` and a stronger, more expensive `review`. At the configured prior, neither is worth buying as a one-step purchase. A two-step planner can still prefer the screen because a clear result lets it stop while a flagged result can make the stronger review worthwhile.
+
+This is option value from information acquisition: the value of an observation comes partly from how it changes later decisions.
+
+Run:
 
 ```bash
-python -m epistemic_action.stress_experiment \
-  --priors 0.02 \
-  --true-accuracy 0.85 \
-  --assumed-accuracies 0.85 \
-  --correlations 0.8 \
+python -m epistemic_action.sequential_experiment
+```
+
+A useful diagnostic is:
+
+```bash
+python -m epistemic_action.sequential_experiment \
+  --prior 0.05 \
   --false-approve-cost 5 \
+  --escalation-cost 0.4 \
+  --horizon 2 \
   --episodes 20000
 ```
 
-Under strong positive dependence, a model that incorrectly treats repeated evidence as independent can become overconfident and cross the decision boundary when a correlation-aware model would not. This is the failure mode the stress test is designed to expose.
+With horizon `1`, exact lookahead reduces to the myopic policy. With horizon `2`, it can discover the value of screening before deciding whether stronger evidence is worth acquiring.
+
+This remains an exact Bayesian planner under a tiny synthetic model. It is **not** yet an Active Inference implementation.
 
 ## Setup
 
@@ -104,22 +134,32 @@ pytest
 
 ```text
 src/epistemic_action/
-├── agents.py               # original clue policies and information gain
-├── environment.py          # two-door clue environment
-├── experiment.py           # clue reliability/cost sweep
-├── plot.py                 # clue experiment plots
-├── evidence.py             # binary evidence model, Bayes updates, VoI
-├── policies.py             # one-step evidence-selection baselines
-├── evidence_experiment.py  # reproducible evidence benchmark
-├── stress.py               # correlated evidence model
-└── stress_experiment.py    # correlation/calibration stress sweep
+├── agents.py                 # original clue policies and information gain
+├── environment.py            # two-door clue environment
+├── experiment.py             # clue reliability/cost sweep
+├── plot.py                   # clue experiment plots
+├── evidence.py               # binary evidence model, Bayes updates, VoI
+├── policies.py               # one-step evidence-selection baselines
+├── evidence_experiment.py    # reproducible evidence benchmark
+├── stress.py                 # correlated evidence model
+├── stress_experiment.py      # correlation/calibration stress sweep
+├── sequential.py             # finite-horizon Bayesian planner
+└── sequential_experiment.py  # sequential acquisition benchmark
 
 tests/
 ```
 
 ## Next question
 
-The next step is sequential acquisition: after observing one source, should the agent stop, query another source, or escalate? That introduces policy depth and is the point where a POMDP, Bayesian sequential planner, and eventually expected-free-energy planning become meaningful comparisons.
+The repository now contains the control problem we needed before introducing Active Inference: a belief state, sequential observations, action costs, stopping, escalation, and finite-horizon policies.
+
+The next scientifically useful step is to represent the same sequential task explicitly as a small POMDP and compare three planners on the **same generative model**:
+
+1. exact Bayesian dynamic programming
+2. a tractable approximate planner
+3. Expected Free Energy / discrete Active Inference
+
+The goal is not to make Active Inference win. It is to identify when its epistemic term changes behavior, whether that behavior improves decision utility, and what computational price it pays.
 
 ## License
 
