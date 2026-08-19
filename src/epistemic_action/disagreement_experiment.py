@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
-from dataclasses import dataclass, fields
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from statistics import fmean
 
@@ -207,7 +207,6 @@ def run_condition(
 
     trajectories: dict[str, ExpectedTrajectory] = {}
     first_actions: dict[str, str] = {}
-
     for policy in policies:
         source = _select_source(
             policy=policy,
@@ -286,7 +285,7 @@ def run_sweep(
 
 
 def summarize(results: list[Result]) -> str:
-    """Return a compact summary of disagreement and regret."""
+    """Return a compact summary of first-action disagreement and regret."""
     grouped: dict[tuple[float, float, float, float, float, float], dict[str, Result]] = {}
     for result in results:
         key = (
@@ -303,9 +302,8 @@ def summarize(results: list[Result]) -> str:
     for policy in ("myopic_voi", "standard_efe", "sophisticated_efe"):
         rows = [condition[policy] for condition in grouped.values()]
         agreements = [
-            row.first_action == grouped[key]["bayes_lookahead"].first_action
-            for key, condition in grouped.items()
-            for row in [condition[policy]]
+            condition[policy].first_action == condition["bayes_lookahead"].first_action
+            for condition in grouped.values()
         ]
         lines.append(
             f"{policy}: first-action agreement={fmean(agreements):.3f}, "
@@ -323,7 +321,7 @@ def write_csv(results: list[Result], output_path: Path) -> None:
         writer = csv.DictWriter(file_handle, fieldnames=fieldnames)
         writer.writeheader()
         for result in results:
-            writer.writerow(result.__dict__)
+            writer.writerow(asdict(result))
 
 
 def _parse_float_list(value: str) -> list[float]:
