@@ -267,13 +267,13 @@ def select_lookahead_source(
 
 
 def sequential_sources() -> tuple[EvidenceSource, ...]:
-    """Return the synthetic sources used to expose non-myopic option value.
+    """Return sources that expose genuine non-myopic option value.
 
-    Neither source is worthwhile as a one-step purchase at the default prior.
-    The cheap screen can still be valuable because a flagged result makes the
-    stronger review worth buying while a clear result lets the agent stop.
+    At the default prior and decision costs, neither source has positive one-step
+    value. A two-step planner still buys the cheap screen because a clear result
+    lets it stop while a flagged result can make the stronger review worthwhile.
     """
     return (
-        EvidenceSource("screen", sensitivity=0.80, specificity=0.80, cost=0.02),
+        EvidenceSource("screen", sensitivity=0.70, specificity=0.70, cost=0.05),
         EvidenceSource("review", sensitivity=0.95, specificity=0.95, cost=0.20),
     )
