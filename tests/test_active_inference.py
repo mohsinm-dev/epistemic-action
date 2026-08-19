@@ -53,6 +53,24 @@ def test_sophisticated_efe_values_screening_at_default_precision() -> None:
     assert source.name == "screen"
 
 
+def test_low_precision_can_overweight_epistemic_value() -> None:
+    """Weak preference precision can make sophisticated EFE over-explore."""
+    sources = sequential_sources()
+    costs = DecisionCosts(false_approve=5.0, false_reject=1.0)
+
+    source = select_sophisticated_efe_source(
+        0.05,
+        sources,
+        costs,
+        escalation_cost=0.40,
+        preference_precision=0.5,
+        steps_remaining=2,
+    )
+
+    assert source is not None
+    assert source.name == "review"
+
+
 def test_abcd_priors_are_normalized() -> None:
     """D priors should be proper distributions."""
     model = build_abcd_model(
@@ -112,5 +130,5 @@ def test_preference_precision_maps_costs_to_log_preferences() -> None:
     assert math.isclose(model.C_terminal[2], -15.0)
     assert math.isclose(model.C_terminal[3], -3.0)
     assert math.isclose(model.C_terminal[4], -1.2)
-    assert math.isclose(model.C_cost[1], -0.06)
+    assert math.isclose(model.C_cost[1], -0.15)
     assert math.isclose(model.C_cost[2], -0.60)
